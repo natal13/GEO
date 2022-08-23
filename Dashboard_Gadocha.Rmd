@@ -1,0 +1,346 @@
+---
+title: "Geowizualizacja i Edycja Kartograficzna - Dashboard"
+author: "Natalia Gadocha 304165"
+date: "semestr letni 2020/2021"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    toc_depth: 2
+    number_sections: yes
+    code_folding: hide
+    theme: readable
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+---
+
+```{r setup, include = FALSE}
+options(rgl.useNULL = TRUE) # Suppress the separate window.
+library(rgl)
+```
+
+## Badane obszary 
+
+### Rezerwat Ciemny Kąt
+Jest to leśny rezewat przyrody utworzony w 1984r.na terenie Puszczy Kurpiowskiej w Gminie Turośl. Jego powierzchnia wynosi 125,95 ha. Powstał w celu zachowania zbiorowisk leśnych i drzewostanów naturalnych charakterystycznych dla wspominanej Puszczy. Gatunki jakie można tu spotkać to m.in.: sosny, świerki, czernice i pszeniec łąkowy. Północną część Rezerwatu stanowią bagna - Leman i Rybica. 
+
+
+### Zion National Park, UT
+Jest to park narodowy położony w południowo-zachodniej części Stanów Zjednoczonych, w stanie Utah.Zajmuje on obszar w zachodniej części wyżyny Kolorado i jest zbudowany ze skał piaskowych, które tworzą płaskie stoliwa, kaniony oraz różne formy skalne. Na jego terenie występują liczne urwiska skalne, wodospady i rzeki. Jego główną i największą część stanowi Zion Canyon. Cała powierzchnia parku zajmuje 593 km2. Jest on wyniesiony od 1117 m n.p.m. do 2660 m.  
+
+
+```{r include = FALSE}
+library(raster)
+library(rgdal)
+library(sp)
+library(sf)
+library(raster)
+library(rgugik)
+library(sp)
+library(maps) 
+library(RColorBrewer)
+library(rayshader)
+library(magick)
+library(ggplot2)
+library(scales)
+library(leaflet)
+library(av)
+library(devtools)
+```
+
+## Mapy interaktywne 
+
+### Zion National Park
+#### Góry i szczyty
+```{r, echo=FALSE}
+
+#--ikonka gory usa 
+
+mountU <- makeIcon(
+  iconUrl = "https://iconarchive.com/download/i107544/google/noto-emoji-travel-places/42462-mountain.ico",
+  iconWidth = 30, iconHeight = 35,
+  #iconAnchorX = 22, iconAnchorY = 94
+  
+)
+
+#-- USA Park 
+usa_m <- leaflet() %>% 
+  addTiles() %>% 
+  addMarkers(lat = 39.392501 , lng= -112.207310, popup = "Fool Creek Peak", icon=mountU) %>%
+  addMarkers(lat = 37.569361 , lng =  -112.938256, popup = "Black Mountain", icon = mountU) %>%
+  addMarkers(lat = 38.750970 , lng = -116.926756, popup = "Mount Jefferson, South Summit", icon = mountU) %>%
+  fitBounds(lat1 = 37.028247, lat2 = 39.506416, lng1 = -112.382432, lng2 = -117.393747)
+
+usa_m 
+
+```
+
+### Rezerwat Ciemny Kąt
+#### Parki i leśnictwa
+```{r, echo=FALSE}
+
+#--ikonka park 
+par <- makeIcon(
+  iconUrl = "https://uxwing.com/wp-content/themes/uxwing/download/23-animals-and-nature/forest.png",
+  iconWidth = 35, iconHeight = 40,
+  #iconAnchorX = 22, iconAnchorY = 94
+  
+)
+
+#-Rezerwat Ciemny Kąt 
+Kat_m <- leaflet() %>% 
+  addTiles() %>% 
+  addMarkers(lng = 21.570048 , lat = 53.559754, popup = "Cypel Banaszkiewicza", icon = par) %>%
+  addMarkers(lng = 21.520520 , lat =  53.623618, popup = "Binduga Karolinka", icon = par) %>%
+  addMarkers(lng = 21.158228 , lat = 53.548326, popup = "Leśnictwo Zielone", icon = par) %>%
+  fitBounds(lng1 = 21.1402810, lng2 = 21.640835, lat1 = 53.544057, lat2 = 53.649057)
+
+
+Kat_m 
+
+```
+
+
+#### Rozkład wysokości na terenie rezerwatu 
+
+```{r, include=FALSE, message=FALSE, warning=FALSE}
+rezerwaty = read_sf("RezerwatyPolygon.shp", options = "ENCODING=WINDOWS-1250")
+
+View(rezerwaty)
+
+b<- rezerwaty[rezerwaty$nazwa == "Ciemny Kąt",]
+# plot(st_geometry(b))
+
+req_df = orto_request(b)
+req_df<-req_df[1:20, ]
+req_df = req_df[req_df$composition == "CIR", ]
+req_df = req_df[order(-req_df$year), ]
+req_df[, 1:6]
+req_df[, c(1:6,9)]
+#tile_download(req_df)
+
+img1 = brick("69849_355479_N-34-92-C-b-3-2.tif")
+img2 = brick("69849_355485_N-34-92-C-b-4-1.tif")
+img = merge(img1, img2)
+img = crop(img, b)
+#img = mask(img,b)
+#plotRGB(img)
+ndvi = (img[[1]] - img[[2]]) / (img[[1]] + img[[2]])
+#plot(ndvi, main = "NDVI")
+req_df = DEM_request(b)
+req_df_DTM = req_df[req_df$format == "ARC/INFO ASCII GRID" &
+                      req_df$product == "DTM" &
+                      (req_df$year == 2015 || req_df$year == 2012), ]
+req_df_DSM = req_df[req_df$format == "ARC/INFO ASCII GRID" &
+                      req_df$product == "DSM" &
+                      ( req_df$year == 2015 || req_df$year == 2012), ]
+req_df_t = rbind(req_df_DTM, req_df_DSM)
+req_df_t[, c(1:6, 9)]
+#tile_download(req_df_t)
+
+DTM1 = raster("	4018_259509_N-34-92-C-b-4-1.asc")#12
+DTM2 = raster("	6069_651212_N-34-92-C-b-3-2.asc")#15
+DSM1 = raster("3128_260949_N-34-92-C-b-4-1.asc")
+DSM2 = raster("6071_651214_N-34-92-C-b-3-2.asc")
+DTM = merge(DTM1, DTM2)
+DSM = merge(DSM1, DSM2)
+DEM = brick(DSM, DTM)
+names(DEM) = c("DSM", "DTM")
+DEM = crop(DEM, b)
+DEM = mask(DEM, b)
+#plot(DEM)
+diffDEM = DEM[[1]] - DEM[[2]]
+
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE }
+plot(diffDEM, main = "Wysokości DEM dla Rezerwatu Ciemny Kąt [m]") 
+#writeRaster(diffDEM, 'demwys.tif')
+
+```
+
+
+
+## Animacje  
+
+
+### Powierzchnia parku
+
+``` {r, include=FALSE, message=FALSE, warning=FALSE}
+
+elevation1 = raster::raster("N37W113.hgt")
+elevation2 = raster::raster("N37W114.hgt")
+
+park_elevation = raster::merge(elevation1,elevation2)
+
+#height_shade(raster_to_matrix(park_elevation)) %>%
+ # plot_map()
+
+
+park_r = raster::raster("LC08_L1TP_038034_20191101_20191114_01_T1_B4.TIF")
+park_g = raster::raster("LC08_L1TP_038034_20191101_20191114_01_T1_B3.TIF")
+park_b = raster::raster("LC08_L1TP_038034_20191101_20191114_01_T1_B2.TIF")
+
+park_rbg = raster::stack(park_r, park_g, park_b)
+#raster::plotRGB(park_rbg, scale=255^2)
+
+park_rbg_corrected = sqrt(raster::stack(park_r, park_g, park_b))
+#raster::plotRGB(park_rbg_corrected)
+
+raster::crs(park_r)
+raster::crs(park_elevation)
+
+#crs(park_r)
+park_elevation_utm = raster::projectRaster(park_elevation, crs = crs(park_r), method = "bilinear")
+#crs(park_elevation_utm)
+
+
+bottom_left = c(y=-113.155277, x=37.116253)
+top_right   = c(y=-112.832502, x=37.414948)
+
+extent_latlong = sp::SpatialPoints(rbind(bottom_left, top_right), proj4string=sp::CRS("+proj=longlat +ellps=WGS84 +datum=WGS84"))
+extent_utm = sp::spTransform(extent_latlong, raster::crs(park_elevation_utm))
+
+e = raster::extent(extent_utm)
+#e
+
+
+park_rgb_cropped = raster::crop(park_rbg_corrected, e)
+elevation_cropped = raster::crop(park_elevation_utm, e)
+
+names(park_rgb_cropped) = c("r","g","b")
+
+park_r_cropped = rayshader::raster_to_matrix(park_rgb_cropped$r)
+park_g_cropped = rayshader::raster_to_matrix(park_rgb_cropped$g)
+park_b_cropped = rayshader::raster_to_matrix(park_rgb_cropped$b)
+
+park_matrix = rayshader::raster_to_matrix(elevation_cropped)
+
+park_rgb_array = array(0,dim=c(nrow(park_r_cropped),ncol(park_r_cropped),3))
+
+park_rgb_array[,,1] = park_r_cropped/255
+park_rgb_array[,,2] = park_g_cropped/255
+park_rgb_array[,,3] = park_b_cropped/255
+
+park_rgb_array = aperm(park_rgb_array, c(2,1,3))
+#plot_map(park_rgb_array)
+
+park_rgb_contrast = scales::rescale(park_rgb_array,to=c(0,1))
+
+```
+```{r, echo=FALSE,webgl=TRUE, message=FALSE, warning=FALSE}
+plot_map(park_rgb_contrast)
+
+```
+
+Powierzchnia parku 3D: 
+
+```{r, echo=FALSE, webgl=TRUE, message=FALSE, warning=FALSE}
+
+  plot_3d(park_rgb_contrast, park_matrix, windowsize = c(1100,900), zscale = 15, shadowdepth = -50, zoom=0.5, 
+          phi=45,theta=-45,fov=70, background = "#F2E1D0", shadowcolor = "#523E2B")
+render_snapshot(title_text = "Zion National Park, Utah | Landsat 8 | 2020",
+                title_bar_color = "#8D3002", title_color = "white", title_bar_alpha = 1)
+
+rglwidget()
+# n= 21
+# angles= seq(0,360,length.out = n)[-1]
+# for(i in 1:n) {
+#   render_camera(theta=-60+angles[i])
+#   render_snapshot(filename = sprintf("parkZ%i.png", i), 
+#                   title_text = "Zion National Park, Utah | Imagery: Landsat 8 | 2019",
+#                   title_bar_color = "#1f5214", title_color = "white", title_bar_alpha = 1)
+# }
+# rgl::rgl.close()
+# 
+# av::av_encode_video(sprintf("parkZ%d.png",seq(1,n-1,by=1)), framerate = 30,
+#  output = "park.mp4")
+# 
+# rgl::rgl.close()
+# system("ffmpeg -framerate 60 -i zionpark%d.png -pix_fmt yuv420p zpark.mp4")
+# 
+
+```
+
+
+### Ciemny Kąt 
+Powierzchnia rezerwatu:
+
+```{r, include = FALSE}
+
+
+DTM1m =raster("	6069_651212_N-34-92-C-b-3-2.asc") #15
+DSM1m = raster("6071_651214_N-34-92-C-b-3-2.asc") #15
+img1m = brick("69849_355479_N-34-92-C-b-3-2.tif")
+extent(DTM1m)
+
+dlm = c(y = 677000, x = 62300) 
+gpm = c(y = 679000, x = 625000) 
+
+extent_plm = sp::SpatialPoints(rbind(dlm, gpm), proj4string= crs(img1m))
+exm = raster::extent(extent_plm)
+
+DTM1_croppedm = raster::crop(DTM1m, exm) 
+DSM1_croppedm = raster::crop(DSM1m, exm) 
+ORTO_croppedm = raster::crop(img1m, exm)
+
+names(ORTO_croppedm) = c("r","g","b")
+pl_r_croppedm = rayshader::raster_to_matrix(ORTO_croppedm$r)
+pl_g_croppedm = rayshader::raster_to_matrix(ORTO_croppedm$g)
+pl_b_croppedm = rayshader::raster_to_matrix(ORTO_croppedm$b)
+
+dtm_matrixm = rayshader::raster_to_matrix(DTM1_croppedm)
+dsm_matrixm = rayshader::raster_to_matrix(DSM1_croppedm)
+
+pl_rgb_arraym = array(0,dim=c(nrow(pl_r_croppedm),ncol(pl_r_croppedm),3))
+pl_rgb_arraym[,,1] = pl_r_croppedm/255 
+pl_rgb_arraym[,,2] = pl_g_croppedm/255 
+pl_rgb_arraym[,,3] = pl_b_croppedm/255 
+pl_rgb_arraym = aperm(pl_rgb_arraym, c(2,1,3))
+
+#plot_map(pl_rgb_arraym)
+#plot(DSM1_croppedm)
+#plot(DTM1_croppedm)
+
+pl_rgb_contrastm = scales::rescale(pl_rgb_arraym,to=c(0,1))
+
+```
+```{r, echo=FALSE}
+pl_rgb_contrastm = scales::rescale(pl_rgb_arraym,to=c(0,1))
+plot_map(pl_rgb_contrastm)
+
+```
+
+#### Ortofotomapa wraz z modelem DTM 
+
+```{r, echo = FALSE, webgl=TRUE}
+
+plot_3d(pl_rgb_contrastm, dtm_matrixm, windowsize = c(1100,900),
+        zscale = 0.5, 
+        shadowdepth = -20, zoom=0.5, phi=45,theta=-45,
+        fov=70, background = "#ffe6cc", shadowcolor = "#b32d00")
+render_snapshot(title_text = "Rezerwat Ciemny Kat, Polska | DTM ",
+                title_bar_color = "#8D3002", title_color = "white", title_bar_alpha = 1)
+rglwidget()
+```
+
+#### Ortofotomapa wraz z modelem DSM 
+```{r, echo = FALSE, webgl=TRUE}
+
+plot_3d(pl_rgb_contrastm, dsm_matrixm, windowsize = c(600,400),
+        zscale = 5, shadowdepth = -20, zoom=0.5, phi=45,theta=-45,
+        fov=70, background = "#ffe6cc", shadowcolor = "#b32d00")
+render_snapshot(title_text = "Rezerwat Ciemny Kat, Polska | DSM ",
+                title_bar_color = "#8D3002", title_color = "white", title_bar_alpha = 1)
+rglwidget()
+
+```
+
+
+## Literatura 
+
+- https://en.wikipedia.org/wiki/Zion_National_Park
+- https://www.polska.travel/pl/przyrodnicze/rezerwat-przyrody-ciemny-kat
+- https://nowogrod.bialystok.lasy.gov.pl/de/rezerwaty-przyrody#.YLv8CqhR1PY
+
